@@ -4,9 +4,9 @@ import (
 	"math"
 	"sort"
 	"time"
-)
 
-import "github.com/jjneely/buckytools/whisper"
+	"github.com/jjneely/buckytools/whisper"
+)
 
 // fillArchive() is a private function that fills data points from srcWSP
 // into dstWsp.  Used by FIll()
@@ -73,7 +73,8 @@ func fillArchive(srcWsp, dstWsp *whisper.Whisper, start, stop int) error {
 // * dest - path to the Whisper file
 // * startTime - Unix time such as time.Now().Unix().  We fill from this time
 //   walking backwards to the begining of the retentions.
-func Files(source, dest string, startTime int) error {
+// * fillSingleLost - wether or not to fill single unit lost
+func Files(source, dest string, startTime int, fillSingleLost bool) error {
 	// Setup, open our files and error check
 	dstWsp, err := whisper.Open(dest)
 	if err != nil {
@@ -86,15 +87,16 @@ func Files(source, dest string, startTime int) error {
 	}
 	defer srcWsp.Close()
 
-	return OpenWSP(srcWsp, dstWsp, startTime)
+	return OpenWSP(srcWsp, dstWsp, startTime, fillSingleLost)
 }
 
 // All() is a convenience function when you need to fill all of
 // the given whisper file paths rather than a specific time range.
 // * source - path to source Whisper file
 // * dest   - path to destination Whisper file
-func All(source, dest string) error {
-	return Files(source, dest, int(time.Now().Unix()))
+// * fillSingleLost - wether or not to fill single unit lost
+func All(source, dest string, fillSingleLost bool) error {
+	return Files(source, dest, int(time.Now().Unix()), fillSingleLost)
 }
 
 // OpenWSP() runs the fill operation on two whisper.Whisper objects that are
@@ -103,10 +105,11 @@ func All(source, dest string) error {
 // * dstWsp - destination *whisper,Whisper object
 // * startTime - Unix time such as int(time.Now().Unix()).  We fill from
 //   this time walking backwards to the beginning.
+// * fillSingleLost - wether or not to fill single unit lost
 //
 // This code heavily inspired by https://github.com/jssjr/carbonate
 // and matches its behavior exactly.
-func OpenWSP(srcWsp, dstWsp *whisper.Whisper, startTime int) error {
+func OpenWSP(srcWsp, dstWsp *whisper.Whisper, startTime int, fillSingleLost bool) error {
 	// Loop over each archive/retention, highest resolution first
 	dstRetentions := whisper.RetentionsByPrecision{dstWsp.Retentions()}
 	sort.Sort(dstRetentions)
@@ -129,11 +132,14 @@ func OpenWSP(srcWsp, dstWsp *whisper.Whisper, startTime int) error {
 		for _, dp := range ts.Values() {
 			if math.IsNaN(dp) && gapstart < 0 {
 				gapstart = start
+				if fillSingleLost && start == ts.UntilTime()-ts.Step() {
+					fillArchive(srcWsp, dstWsp, gapstart-ts.Step(), start)
+				}
 			} else if !math.IsNaN(dp) && gapstart >= 0 {
 				// Carbonate ignores single units lost.  Means:
 				// XXX: Gap of a single step are ignored as the
 				// following if uses > not, =>
-				if (start - gapstart) > v.SecondsPerPoint() {
+				if (start-gapstart) > v.SecondsPerPoint() || fillSingleLost {
 					// XXX: Fence post: This replaces the
 					// current DP -- a known good value
 					fillArchive(srcWsp, dstWsp, gapstart-ts.Step(), start)

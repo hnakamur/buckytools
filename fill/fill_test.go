@@ -1,6 +1,7 @@
 package fill
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"math"
@@ -9,9 +10,11 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+
+	"github.com/jjneely/buckytools/whisper"
 )
 
-import "github.com/jjneely/buckytools/whisper"
+var fillSingleLost = flag.Bool("fill-single-lost", false, "Fills single unit lost")
 
 func whisperCreateData(path string, ts []*whisper.TimeSeriesPoint) error {
 	os.Remove(path) // Don't care if it fails
@@ -171,8 +174,15 @@ func simulateFill(a, b []*whisper.TimeSeriesPoint) []*whisper.TimeSeriesPoint {
 	for i, v := range dataMerged {
 		if math.IsNaN(v.Value) && gapstart < 0 {
 			gapstart = i
+			if *fillSingleLost && i == len(dataMerged)-1 {
+				log.Printf("simulateFill fills because fillSingleLost is true for i=%d\n", i)
+				copy(dataMerged[gapstart:i+1], a[gapstart:i+1])
+			}
 		} else if !math.IsNaN(v.Value) && gapstart >= 0 {
-			if i-gapstart > 1 {
+			if i-gapstart > 1 || *fillSingleLost {
+				if i-gapstart <= 1 {
+					log.Printf("simulateFill fills because fillSingleLost is true for i=%d\n", i)
+				}
 				// like the source, ignore single null values.
 				// like the source copy over the current value.
 				copy(dataMerged[gapstart:i+1], a[gapstart:i+1])
@@ -214,7 +224,7 @@ func TestFill(t *testing.T) {
 		t.Error("Data with nulls written to b.wsp doesn't match what was read")
 	}
 
-	err = Files("a.wsp", "b.wsp", int(time.Now().Unix()))
+	err = Files("a.wsp", "b.wsp", int(time.Now().Unix()), *fillSingleLost)
 	if err != nil {
 		t.Error(err)
 	}
@@ -278,7 +288,7 @@ func TestReference(t *testing.T) {
 	pythonFill, err := fetchFromFile("b1.wsp")
 
 	// Run my version
-	err = Files("a2.wsp", "b2.wsp", int(time.Now().Unix()))
+	err = Files("a2.wsp", "b2.wsp", int(time.Now().Unix()), *fillSingleLost)
 	if err != nil {
 		t.Error(err)
 	}

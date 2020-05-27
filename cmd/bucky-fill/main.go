@@ -7,15 +7,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-)
 
-import "github.com/jjneely/buckytools"
-import "github.com/jjneely/buckytools/fill"
+	"github.com/jjneely/buckytools"
+	"github.com/jjneely/buckytools/fill"
+)
 
 var (
 	deleteSourceFiles bool
 	recursiveMode     bool
 	showLog           bool
+	fillSingleLost    bool
 	printVersion      bool
 )
 
@@ -32,6 +33,7 @@ func main() {
 	flag.BoolVar(&printVersion, "version", false, "Display version information.")
 	flag.BoolVar(&recursiveMode, "r", false, "Recursive mode")
 	flag.BoolVar(&deleteSourceFiles, "d", false, "Delete source file after fill")
+	flag.BoolVar(&fillSingleLost, "s", false, "Fill single unit lost")
 	flag.BoolVar(&showLog, "l", false, "Show log")
 	flag.Parse()
 	if printVersion {
@@ -94,7 +96,7 @@ func fillFile(sourceFile, destinationFile string) error {
 			return err
 		}
 	} else {
-		if err := fill.All(sourceFile, destinationFile); err != nil {
+		if err := fill.All(sourceFile, destinationFile, fillSingleLost); err != nil {
 			return err
 		}
 	}
